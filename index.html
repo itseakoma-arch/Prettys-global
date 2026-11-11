@@ -1089,7 +1089,7 @@
           <h3>🔥 Next Jeans & Joggers Drop Alert</h3>
           <p>Get notified on WhatsApp 15m before new bales drop on TikTok Live.</p>
         </div>
-        <a class="vip-join-btn" href="https://wa.me/233207138036?text=Hello%20Pretty's%20Global!%20Add%20me%20to%20your%20VIP%20Jeans%20%26%20Joggers%20Drop%20List." target="_blank">
+        <a class="vip-join-btn" href="https://wa.me/233207138036?text=Hello%20Pretty's%20Global!%20Add%20me%20to%20your%20VIP%20Jeans%20%26%20Joggers%20Drop%20List." target="_blank" onclick="notifyVipJoinClick()">
           📲 Join VIP List
         </a>
       </aside>
@@ -1191,6 +1191,87 @@
     const STORAGE_KEY = "prettys_global_store_v1";
     const VISITS_24H_KEY = "prettys_global_visits_24h_v1";
     const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
+    // ============================================================================
+    // 🔔 LOCK-SCREEN NOTIFICATION ROUTER (DEMO MODE vs. VENDOR SOLD MODE)
+    // - false = Pitching Mode: Sends alerts to YOUR phone ("eakoma-trackstar-alerts")
+    // - true  = Sold Mode: Stops alerting you & alerts THE VENDOR ("prettysglobal-leads-8036")
+    // ============================================================================
+    const STORE_SOLD_TO_VENDOR = false;
+    const DEVELOPER_NTFY_TOPIC = "eakoma-trackstar-alerts";
+    const VENDOR_NTFY_TOPIC = "prettysglobal-leads-8036";
+    const NTFY_TOPIC = STORE_SOLD_TO_VENDOR ? VENDOR_NTFY_TOPIC : DEVELOPER_NTFY_TOPIC;
+
+    let lastViewedItemTitle = "Blush Pink Patchwork Ripped Cargo Jeans (UK 10)";
+
+    function detectDeviceLabel() {
+      const ua = navigator.userAgent || "";
+      if (/iPhone/i.test(ua)) return "iPhone";
+      if (/iPad/i.test(ua)) return "iPad";
+      if (/Android/i.test(ua)) return "Android Phone";
+      if (/Macintosh/i.test(ua)) return "Mac";
+      if (/Windows/i.test(ua)) return "Windows PC";
+      return "Device";
+    }
+
+    function getUrlRefTag() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const ref = params.get("ref") || params.get("tel") || params.get("v") || params.get("id");
+        return ref ? ` • Ref: ${ref}` : "";
+      } catch (e) {
+        return "";
+      }
+    }
+
+    function sendSilentAlert(title, message, priority = "default", tags = "jeans,eyes") {
+      try {
+        fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
+          method: "POST",
+          headers: {
+            "Title": title,
+            "Priority": priority,
+            "Tags": tags
+          },
+          body: `${message} • (${detectDeviceLabel()}${getUrlRefTag()})`
+        }).catch(() => {});
+      } catch (e) {}
+    }
+
+    function notifyInitialOpen() {
+      try {
+        const sessionPingKey = "prettys_global_pinged_session";
+        if (!sessionStorage.getItem(sessionPingKey)) {
+          sessionStorage.setItem(sessionPingKey, "1");
+          sendSilentAlert(
+            "Pretty's Global Store Opened!",
+            "Princess Prempeh (or a visitor) just opened the Pretty's Global store link!",
+            "high",
+            "eyes,jeans"
+          );
+        }
+      } catch (e) {}
+    }
+
+    function notifyVipJoinClick() {
+      sendSilentAlert(
+        "📲 Pretty's Global VIP List Clicked!",
+        `Tapped "Join VIP List" (Last viewed: ${lastViewedItemTitle})`,
+        "urgent",
+        "iphone,fire"
+      );
+    }
+
+    function notifyBuyOnWhatsApp(itemId) {
+      const found = items.find(s => s.id === itemId);
+      const label = found ? `${found.title} (${found.size} • GH₵${found.price})` : lastViewedItemTitle;
+      sendSilentAlert(
+        "🛒 Pretty's Global Buy on WhatsApp Clicked!",
+        `Tapped Buy on WhatsApp for: ${label}`,
+        "urgent",
+        "shopping_cart,jeans"
+      );
+    }
 
     function trackAndGet24hVisits() {
       const now = Date.now();
@@ -1325,8 +1406,16 @@
       if (!item) return;
 
       item.views = (item.views || 10) + 1;
+      lastViewedItemTitle = `${item.title} (${item.size} • GH₵${item.price})`;
       saveInventory();
       renderCatalog();
+
+      sendSilentAlert(
+        "Item Viewed on Pretty's Global",
+        `Tapped Quick-View: ${item.title} (${item.size} - GH₵${item.price})`,
+        "default",
+        "jeans"
+      );
 
       const oldP = item.oldPrice || (item.price + 45);
       const discountPct = Math.round(((oldP - item.price) / oldP) * 100);
@@ -1379,7 +1468,7 @@
 
             <div>
               ${item.available ? `
-                <a href="${waLink}" target="_blank" class="shein-buy-btn" style="padding:13px; font-size:13px;">
+                <a href="${waLink}" target="_blank" class="shein-buy-btn" style="padding:13px; font-size:13px;" onclick="notifyBuyOnWhatsApp('${item.id}')">
                   💬 Order on WhatsApp (0207138036)
                 </a>
               ` : `
@@ -1411,6 +1500,12 @@
         isSellerUnlocked = true;
         closeModal("pinModal");
         setMode("seller");
+        sendSilentAlert(
+          "BINGO! Pretty's Global Unlocked Admin!",
+          "Princess Prempeh just entered PIN 8036 and unlocked Seller Mode — call her right now!",
+          "urgent",
+          "rotating_light,lock"
+        );
       } else {
         document.getElementById("pinError").style.display = "block";
       }
@@ -1439,6 +1534,12 @@
       items = items.map(item => {
         if (item.id === id) {
           const nextAvail = !item.available;
+          sendSilentAlert(
+            "Pretty's Global Tested Mark SOLD!",
+            `Toggled ${item.title} to ${nextAvail ? "AVAILABLE" : "SOLD OUT"}`,
+            "high",
+            "fire"
+          );
           return {
             ...item,
             available: nextAvail,
@@ -1565,7 +1666,7 @@
               </div>
 
               ${item.available ? `
-                <a href="${waLink}" target="_blank" class="shein-buy-btn">
+                <a href="${waLink}" target="_blank" class="shein-buy-btn" onclick="notifyBuyOnWhatsApp('${item.id}')">
                   🛒 Buy on WhatsApp
                 </a>
               ` : `
@@ -1632,6 +1733,7 @@
 
     trackAndGet24hVisits();
     renderAll();
+    notifyInitialOpen();
   </script>
 </body>
 </html>
